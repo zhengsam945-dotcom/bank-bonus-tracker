@@ -1,10 +1,14 @@
 import os
 import json
+import calendar
+import traceback
+from typing import Any, Optional
+from datetime import datetime, date
+
 import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import date
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -147,10 +151,9 @@ def ensure_spreadsheet_id() -> None:
 def clean_value(value: Any) -> str:
     if value is None:
         return ""
-    if isinstance(value, float) and pd.isna(value):
+    if pd.isna(value):
         return ""
     return str(value)
-
 
 def parse_date(value: Any) -> Optional[date]:
     if value is None:
