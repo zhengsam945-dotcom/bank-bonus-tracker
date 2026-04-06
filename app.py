@@ -152,12 +152,20 @@ def clean_value(value: Any) -> str:
 
 
 def parse_date(value: Any) -> Optional[date]:
-    if value in (None, "", pd.NA):
+    if value is None:
         return None
-    try:
-        return pd.to_datetime(str(value), errors="coerce").date()
-    except Exception:
+    if pd.isna(value):
         return None
+
+    text = str(value).strip()
+    if text == "":
+        return None
+
+    dt = pd.to_datetime(text, errors="coerce")
+    if pd.isna(dt):
+        return None
+
+    return dt.date()
 
 
 def safe_to_numeric(series: pd.Series) -> pd.Series:
