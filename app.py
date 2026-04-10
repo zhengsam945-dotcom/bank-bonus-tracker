@@ -696,7 +696,7 @@ elif menu == "Master Timeline":
 
 elif menu == "Month Calendar":
     st.subheader("Month Calendar")
-    event_df = make_timeline_event_df(timeline_df)
+    event_df = make_timeline_event_df(timeline_df, offers_df)
     if event_df.empty:
         st.info("No timeline stages yet.")
     else:
