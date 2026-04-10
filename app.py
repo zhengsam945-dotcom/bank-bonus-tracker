@@ -260,13 +260,100 @@ def delete_timeline_row(row_number: int) -> None:
     timeline_ws.delete_rows(row_number)
 
 
-def make_timeline_event_df(timeline_df: pd.DataFrame) -> pd.DataFrame:
-    if timeline_df.empty:
-        return pd.DataFrame(columns=["offer_id", "stage_label", "stage_type", "status", "start_date_dt", "end_date_dt", "note"])
-    tmp = timeline_df.copy()
-    tmp["start_date_dt"] = tmp["start_date"].apply(parse_date)
-    tmp["end_date_dt"] = tmp["end_date"].apply(parse_date)
-    return tmp
+def make_timeline_event_df(timeline_df: pd.DataFrame, offers_df: pd.DataFrame) -> pd.DataFrame:
+    events = []
+
+    # ---------- 1) timeline_stages -> start/end events ----------
+    if timeline_df is not None and not timeline_df.empty:
+        tmp = timeline_df.copy()
+
+        if "start_date" in tmp.columns:
+            tmp["start_date_dt"] = tmp["start_date"].apply(parse_date)
+        else:
+            tmp["start_date_dt"] = None
+
+        if "end_date" in tmp.columns:
+            tmp["end_date_dt"] = tmp["end_date"].apply(parse_date)
+        else:
+            tmp["end_date_dt"] = None
+
+        for _, row in tmp.iterrows():
+            offer_id = clean_value(row.get("offer_id"))
+            stage_label = clean_value(row.get("stage_label"))
+            stage_type = clean_value(row.get("stage_type"))
+            status = clean_value(row.get("status"))
+            note = clean_value(row.get("note"))
+
+            start_dt = row.get("start_date_dt")
+            end_dt = row.get("end_date_dt")
+
+            # start event
+            if start_dt is not None:
+                events.append({
+                    "event_date": start_dt,
+                    "offer_id": offer_id,
+                    "event_label": f"{stage_label} (Start)" if stage_label else "Stage Start",
+                    "event_type": stage_type if stage_type else "timeline_stage_start",
+                    "status": status,
+                    "note": note,
+                    "source": "timeline_stages",
+                })
+
+            # end event
+            if end_dt is not None:
+                events.append({
+                    "event_date": end_dt,
+                    "offer_id": offer_id,
+                    "event_label": f"{stage_label} (End)" if stage_label else "Stage End",
+                    "event_type": stage_type if stage_type else "timeline_stage_end",
+                    "status": status,
+                    "note": note,
+                    "source": "timeline_stages",
+                })
+
+    # ---------- 2) offers -> key date events ----------
+    if offers_df is not None and not offers_df.empty:
+        offer_date_fields = [
+            ("need_keep_balance_until", "Keep Balance Until", "offer_keep_balance_until"),
+            ("must_keep_account_open_until", "Safe to Close After", "offer_safe_close_after"),
+            ("dd_posted_date", "DD Posted", "offer_dd_posted"),
+            ("bonus_posted_date", "Bonus Posted", "offer_bonus_posted"),
+            ("account_open_date", "Account Opened", "offer_account_opened"),
+        ]
+
+        tmp = offers_df.copy()
+
+        for _, row in tmp.iterrows():
+            offer_id = clean_value(row.get("offer_id"))
+            bank_name = clean_value(row.get("bank_name"))
+            bonus_name = clean_value(row.get("bonus_name"))
+            status = clean_value(row.get("status"))
+
+            prefix = ""
+            if bank_name or bonus_name:
+                prefix = f"{bank_name} - {bonus_name}".strip(" -")
+
+            for col_name, label, event_type in offer_date_fields:
+                dt = parse_date(row.get(col_name))
+                if dt is not None:
+                    events.append({
+                        "event_date": dt,
+                        "offer_id": offer_id,
+                        "event_label": label,
+                        "event_type": event_type,
+                        "status": status,
+                        "note": prefix,
+                        "source": "offers",
+                    })
+
+    if not events:
+        return pd.DataFrame(columns=[
+            "event_date", "offer_id", "event_label", "event_type", "status", "note", "source"
+        ])
+
+    event_df = pd.DataFrame(events)
+    event_df = event_df.sort_values(["event_date", "offer_id", "event_label"], na_position="last")
+    return event_df
 
 
 def month_events_map(event_df: pd.DataFrame, year: int, month: int) -> Dict[int, List[str]]:
